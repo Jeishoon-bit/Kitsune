@@ -9,16 +9,37 @@
     <string name="action_close">Cerrar</string>
     <string name="action_enable_all">Activar todos</string>
     <string name="action_done">Listo</string>
+    <string name="action_share">Compartir</string>
+    <string name="action_watch">Ver</string>
+    <string name="action_trailer">Trailer</string>
+    <string name="action_open_anilist">Ver en AniList</string>
+
+    <string name="tab_home">Inicio</string>
+    <string name="tab_search">Buscar</string>
+    <string name="tab_settings">Ajustes</string>
+    <string name="tab_overview">Inicio</string>
+    <string name="tab_episodes">Episodios</string>
+    <string name="tab_related">Relacionado</string>
+
+    <string name="section_new_episodes">Nuevos episodios</string>
+    <string name="section_trending">Tendencias</string>
+    <string name="genre_all">Todos</string>
 
     <string name="loading">Cargando…</string>
     <string name="empty_results">Sin resultados</string>
     <string name="search_hint">Buscar anime…</string>
     <string name="search_idle_hint">Escribe al menos 3 caracteres</string>
     <string name="synopsis_missing">Sin sinopsis disponible.</string>
+    <string name="episodes_official_empty">Sin episodios oficiales listados para este título.</string>
+    <string name="related_empty">Sin títulos relacionados.</string>
 
     <string name="episodes_format">%1$d episodios</string>
     <string name="episodes_short">%1$d eps</string>
+    <string name="episode_label">Episodio %1$d</string>
     <string name="score_format">%1$d%%</string>
+    <string name="members_format">%1$s miembros</string>
+    <string name="duration_format">%1$d min</string>
+    <string name="season_label">Temporada %1$d</string>
 
     <string name="settings_title">Ajustes</string>
     <string name="providers_title">Servidores</string>
