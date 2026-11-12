@@ -1,90 +1,107 @@
 package app.kitsune.stream.ui.screens
 
-import androidx.compose.foundation.layout.*
+import android.app.Application
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.kitsune.stream.data.catalog.AniListCatalog
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import app.kitsune.stream.KitsuneApplication
+import app.kitsune.stream.R
+import app.kitsune.stream.data.catalog.CatalogResult
 import app.kitsune.stream.data.model.Anime
-import coil.compose.AsyncImage
+import app.kitsune.stream.ui.components.AnimeRow
+import app.kitsune.stream.ui.components.EmptyState
+import app.kitsune.stream.ui.components.ErrorState
+import app.kitsune.stream.ui.components.LoadingState
+import app.kitsune.stream.ui.components.UiState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onAnimeClick: (Int) -> Unit,
     onSearchClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    viewModel: HomeViewModel = viewModel()
 ) {
-    val catalog = remember { AniListCatalog() }
-    var items by remember { mutableStateOf<List<Anime>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        items = catalog.trending()
-        loading = false
-    }
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Kitsune") },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
-                    TextButton(onClick = onSearchClick) { Text("Buscar") }
-                    TextButton(onClick = onSettingsClick) { Text("Ajustes") }
+                    IconButton(onClick = onSearchClick) {
+                        Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.action_search))
+                    }
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.action_settings))
+                    }
                 }
             )
         }
     ) { padding ->
-        if (loading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(items, key = { it.anilistId }) { anime ->
-                    AnimeRow(anime) { anime.malId?.let(onAnimeClick) }
+        val modifier = Modifier.fillMaxSize().padding(padding)
+        when (val s = state) {
+            UiState.Loading -> LoadingState(modifier)
+            is UiState.Error -> ErrorState(s.message, viewModel::load, modifier)
+            is UiState.Success -> {
+                if (s.data.isEmpty()) {
+                    EmptyState(stringResource(R.string.empty_results), modifier)
+                } else {
+                    LazyColumn(
+                        modifier = modifier,
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(s.data, key = { it.anilistId }) { anime ->
+                            AnimeRow(anime) { onAnimeClick(anime.anilistId) }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-fun AnimeRow(anime: Anime, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = anime.coverImage,
-                contentDescription = anime.title,
-                modifier = Modifier.size(56.dp, 78.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    anime.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    listOfNotNull(
-                        anime.seasonYear?.toString(),
-                        anime.episodes?.let { "$it eps" },
-                        anime.averageScore?.let { "$it%" }
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+class HomeViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val catalog = (app as KitsuneApplication).container.catalog
+
+    private val _state = MutableStateFlow<UiState<List<Anime>>>(UiState.Loading)
+    val state: StateFlow<UiState<List<Anime>>> = _state.asStateFlow()
+
+    init { load() }
+
+    fun load() {
+        viewModelScope.launch {
+            _state.value = UiState.Loading
+            _state.value = when (val r = catalog.trending()) {
+                is CatalogResult.Ok -> UiState.Success(r.data)
+                is CatalogResult.Error -> UiState.Error(r.message)
             }
         }
     }
