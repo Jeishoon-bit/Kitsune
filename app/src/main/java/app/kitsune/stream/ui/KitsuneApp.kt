@@ -47,13 +47,17 @@ fun KitsuneApp() {
     Scaffold(
         bottomBar = {
             if (showBar) {
-                KitsuneBottomBar(tabs, currentRoute) { route ->
-                    nav.navigate(route) {
-                        popUpTo(Routes.HOME) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+                KitsuneBottomBar(
+                    tabs = tabs,
+                    currentRoute = currentRoute,
+                    onSelect = { route ->
+                        nav.navigate(route) {
+                            popUpTo(Routes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
-                }
+                )
             }
         }
     ) { padding ->
