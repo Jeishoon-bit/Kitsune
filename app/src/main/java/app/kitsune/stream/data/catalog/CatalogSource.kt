@@ -18,5 +18,7 @@ interface CatalogSource {
     suspend fun search(query: String, page: Int = 1): CatalogResult<List<Anime>>
     suspend fun detail(anilistId: Int): CatalogResult<Anime>
     suspend fun trending(page: Int = 1): CatalogResult<List<Anime>>
+    suspend fun airing(page: Int = 1): CatalogResult<List<Anime>>
+    suspend fun byGenre(genre: String, page: Int = 1): CatalogResult<List<Anime>>
     suspend fun season(year: Int, season: AniListSeason): CatalogResult<List<Anime>>
 }
