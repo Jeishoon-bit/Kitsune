@@ -1,4 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kitsune</string>
+
+    <string name="action_search">Buscar</string>
+    <string name="action_settings">Ajustes</string>
+    <string name="action_back">Atrás</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_close">Cerrar</string>
+    <string name="action_enable_all">Activar todos</string>
+    <string name="action_done">Listo</string>
+
+    <string name="loading">Cargando…</string>
+    <string name="empty_results">Sin resultados</string>
+    <string name="search_hint">Buscar anime…</string>
+    <string name="search_idle_hint">Escribe al menos 3 caracteres</string>
+    <string name="synopsis_missing">Sin sinopsis disponible.</string>
+
+    <string name="episodes_format">%1$d episodios</string>
+    <string name="episodes_short">%1$d eps</string>
+    <string name="score_format">%1$d%%</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="providers_title">Servidores</string>
+    <string name="providers_summary">Elige qué proveedores están activos</string>
+    <string name="providers_enabled_count">%1$d de %2$d activos</string>
+    <string name="providers_hint">Un servidor apagado no se consulta para episodios ni aparece en el reproductor. Al menos uno debe permanecer activo.</string>
+    <string name="providers_min_one">Al menos un servidor debe quedar activo</string>
+    <string name="provider_fast">Rápido</string>
 </resources>
