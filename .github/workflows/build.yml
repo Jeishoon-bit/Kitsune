@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,8 +27,12 @@ jobs:
       - name: Gradle (cache)
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Licencias SDK
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null || true
+          fi
 
       - name: Permiso gradlew
         run: chmod +x gradlew
