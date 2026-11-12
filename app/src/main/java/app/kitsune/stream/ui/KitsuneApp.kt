@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import app.kitsune.stream.ui.screens.DetailScreen
 import app.kitsune.stream.ui.screens.HomeScreen
 import app.kitsune.stream.ui.screens.SearchScreen
@@ -15,9 +17,9 @@ import app.kitsune.stream.ui.screens.SettingsScreen
 object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
-    const val DETAIL = "detail/{malId}"
     const val SETTINGS = "settings"
-    fun detail(malId: Int) = "detail/$malId"
+    const val DETAIL = "detail/{anilistId}"
+    fun detail(anilistId: Int) = "detail/$anilistId"
 }
 
 @Composable
@@ -40,9 +42,11 @@ fun KitsuneApp() {
             composable(Routes.SEARCH) {
                 SearchScreen(onAnimeClick = { nav.navigate(Routes.detail(it)) })
             }
-            composable(Routes.DETAIL) { entry ->
-                val malId = entry.arguments?.getString("malId")?.toIntOrNull() ?: return@composable
-                DetailScreen(malId = malId, onBack = { nav.popBackStack() })
+            composable(
+                route = Routes.DETAIL,
+                arguments = listOf(navArgument("anilistId") { type = NavType.IntType })
+            ) {
+                DetailScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(onBack = { nav.popBackStack() })
