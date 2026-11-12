@@ -1,8 +1,11 @@
 package app.kitsune.stream.data.catalog
 
 import app.kitsune.stream.data.model.Anime
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runInterruptible
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -16,17 +19,13 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.util.concurrent.TimeUnit
+import java.io.IOException
 
-class AniListCatalog(
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
-) : CatalogSource {
+class AniListCatalog(private val client: OkHttpClient) : CatalogSource {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-    private val endpoint = "https://graphql.anilist.co"
+
+    private class RateLimitException(val retryAfterSeconds: Long?) : IOException()
 
     private val mediaFields = """
         id
@@ -41,26 +40,52 @@ class AniListCatalog(
         seasonYear
     """.trimIndent()
 
-    private suspend fun post(query: String, variables: JsonObject): JsonObject? =
-        withContext(Dispatchers.IO) {
-            val payload = buildJsonObject {
-                put("query", query)
-                put("variables", variables)
-            }.toString()
+    private suspend fun post(
+        query: String,
+        variables: JsonObject,
+        allowRetry: Boolean = true
+    ): CatalogResult<JsonObject> = try {
+        val payload = buildJsonObject {
+            put("query", query)
+            put("variables", variables)
+        }.toString()
 
-            val request = Request.Builder()
-                .url(endpoint)
-                .post(payload.toRequestBody("application/json".toMediaType()))
-                .header("Accept", "application/json")
-                .build()
+        val request = Request.Builder()
+            .url(ENDPOINT)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .header("Accept", "application/json")
+            .build()
 
-            runCatching {
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use null
-                    json.parseToJsonElement(response.body?.string() ?: return@use null).jsonObject
+        val root = runInterruptible(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                if (response.code == 429) {
+                    throw RateLimitException(response.header("Retry-After")?.toLongOrNull())
                 }
-            }.getOrNull()
+                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+                val body = response.body?.string() ?: throw IOException("Respuesta vacía")
+                json.parseToJsonElement(body).jsonObject
+            }
         }
+
+        val gqlError = root["errors"]?.jsonArray?.firstOrNull()
+            ?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
+        if (gqlError != null) CatalogResult.Error(gqlError) else CatalogResult.Ok(root)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: RateLimitException) {
+        if (allowRetry) {
+            delay((e.retryAfterSeconds ?: 30L).coerceIn(1L, 10L) * 1000L)
+            post(query, variables, allowRetry = false)
+        } else {
+            CatalogResult.Error("AniList está limitando las peticiones. Inténtalo de nuevo en un minuto.")
+        }
+    } catch (e: IOException) {
+        CatalogResult.Error("No se pudo conectar con AniList. Revisa tu conexión.")
+    } catch (e: SerializationException) {
+        CatalogResult.Error("AniList devolvió una respuesta inválida.")
+    } catch (e: IllegalArgumentException) {
+        CatalogResult.Error("AniList devolvió una respuesta inválida.")
+    }
 
     private fun parseMedia(obj: JsonObject): Anime? {
         val id = obj["id"]?.jsonPrimitive?.intOrNull ?: return null
@@ -82,14 +107,14 @@ class AniListCatalog(
         )
     }
 
-    private fun parsePage(root: JsonObject?): List<Anime> {
-        val media = root?.get("data")?.jsonObject
+    private fun parsePage(root: JsonObject): List<Anime> {
+        val media = root["data"]?.jsonObject
             ?.get("Page")?.jsonObject
             ?.get("media")?.jsonArray ?: return emptyList()
         return media.mapNotNull { parseMedia(it.jsonObject) }
     }
 
-    override suspend fun search(query: String, page: Int): List<Anime> {
+    override suspend fun search(query: String, page: Int): CatalogResult<List<Anime>> {
         val q = """
             query (${'$'}search: String, ${'$'}page: Int) {
               Page(page: ${'$'}page, perPage: 20) {
@@ -99,26 +124,31 @@ class AniListCatalog(
               }
             }
         """.trimIndent()
-        return parsePage(post(q, buildJsonObject {
+        return post(q, buildJsonObject {
             put("search", query)
             put("page", page)
-        }))
+        }).map { parsePage(it) }
     }
 
-    override suspend fun detail(malId: Int): Anime? {
+    override suspend fun detail(anilistId: Int): CatalogResult<Anime> {
         val q = """
-            query (${'$'}idMal: Int) {
-              Media(idMal: ${'$'}idMal, type: ANIME) {
+            query (${'$'}id: Int) {
+              Media(id: ${'$'}id, type: ANIME) {
                 $mediaFields
               }
             }
         """.trimIndent()
-        val root = post(q, buildJsonObject { put("idMal", malId) })
-        val media = root?.get("data")?.jsonObject?.get("Media")?.jsonObject ?: return null
-        return parseMedia(media)
+        return when (val r = post(q, buildJsonObject { put("id", anilistId) })) {
+            is CatalogResult.Error -> r
+            is CatalogResult.Ok -> {
+                val anime = r.data["data"]?.jsonObject?.get("Media")?.jsonObject?.let(::parseMedia)
+                if (anime != null) CatalogResult.Ok(anime)
+                else CatalogResult.Error("No se encontró el anime.")
+            }
+        }
     }
 
-    override suspend fun trending(page: Int): List<Anime> {
+    override suspend fun trending(page: Int): CatalogResult<List<Anime>> {
         val q = """
             query (${'$'}page: Int) {
               Page(page: ${'$'}page, perPage: 20) {
@@ -128,10 +158,10 @@ class AniListCatalog(
               }
             }
         """.trimIndent()
-        return parsePage(post(q, buildJsonObject { put("page", page) }))
+        return post(q, buildJsonObject { put("page", page) }).map { parsePage(it) }
     }
 
-    override suspend fun season(year: Int, season: String): List<Anime> {
+    override suspend fun season(year: Int, season: AniListSeason): CatalogResult<List<Anime>> {
         val q = """
             query (${'$'}year: Int, ${'$'}season: MediaSeason) {
               Page(page: 1, perPage: 30) {
@@ -141,9 +171,13 @@ class AniListCatalog(
               }
             }
         """.trimIndent()
-        return parsePage(post(q, buildJsonObject {
+        return post(q, buildJsonObject {
             put("year", year)
-            put("season", season)
-        }))
+            put("season", season.name)
+        }).map { parsePage(it) }
+    }
+
+    companion object {
+        private const val ENDPOINT = "https://graphql.anilist.co"
     }
 }
